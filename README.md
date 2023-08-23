@@ -11,7 +11,7 @@ You need Chrome 116 to fit the chromedriver.exe in this repository.
 > python ndr_scraper.py
 ```
 Then you just have to enter the starting year and month with '-' between them (e.g. '2022-01'). And after that the last year and month of the time period for which you would like to download the results. 
-<img title="How To Run" src="how_to_run.jpeg">
+<img title="How To Run" src="how_to_run.jpg">
 
 
 
