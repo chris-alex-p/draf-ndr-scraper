@@ -14,6 +14,8 @@ Then you just have to enter the starting year and month with '-' between them (e
 
 ![How To Run](how_to_run.jpg)
 
+The script will then start the Chrome browser to fetch some IDs from ndr.nl (could have done it headless, but I did not want to). After that two csv files are going to be created.
+One with the event IDs from ndr.nl and one with the race results. In case of any errors (e.g. no tables for an event) a third file will be created which logs the errors.
 
 
 And I think I should add something like "Please scrape responsibly".
