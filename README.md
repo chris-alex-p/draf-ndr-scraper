@@ -19,6 +19,10 @@ And please don't go overboard with the length of the time interval because the s
 The script will then start the Chrome browser to fetch some IDs from ndr.nl (could have done it headless, but I did not want to). After that two csv files are going to be created.
 One with the event IDs from ndr.nl and one with the race results. In case of any errors (e.g. no tables for an event) a third file will be created which logs the errors.
 
+A header will be created in the csv file with the results. Please keep this in mind when combining several result-files.
+
+#### Example of the Results File
+![Example of file](example.jpg)
 
 And I think I should add something like "Please scrape responsibly".
 
