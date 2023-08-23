@@ -98,7 +98,7 @@ def get_events(months_list, events_filename):
     driver.quit()
 
 
-def get_event_tables(event_id):
+def get_event_tables(event_id, col_names):
     '''
     Fetches all result tables for one horse racing event and returns them as
     a list of data frames.
@@ -166,15 +166,9 @@ def get_event_tables(event_id):
         result_df['race_infos'] = koers_datum_baan[1].get_text()
         result_df['event'] = event
         # all possible columns in result tables from ndr.nl
-        all_cols = [
-            'event', 'date_track', 'race_time', 'race_number', 'race_title', 
-            'description1', 'description2', 'description3', 'race_infos',
-            'nr.', 'paard', 'rijder', 'afstand', 'startnummer', 'startnr', 
-            'box', 'tijd', 'na 1e', 'Hcap', 'prijs', 'COTE' 
-        ]
         #    result_df_cols = list(result_df.columns.values)
         missing_cols = [
-            col for col in all_cols if col not in result_df.columns
+            col for col in col_names if col not in result_df.columns
         ]
         result_df.loc[:, missing_cols] = ''
         # reorder columns
@@ -223,7 +217,16 @@ with open(events_csv, 'rt', encoding = 'utf-8') as fin:
     cin = csv.reader(fin)
     my_events = [row[0] for row in cin]
 # get the race result for all events in list and write to a second csv file
+all_cols = [
+    'event', 'date_track', 'race_time', 'race_number', 'race_title', 
+    'description1', 'description2', 'description3', 'race_infos',
+    'nr.', 'paard', 'rijder', 'afstand', 'startnummer', 'startnr', 
+    'box', 'tijd', 'na 1e', 'Hcap', 'prijs', 'COTE' 
+]
+with open(results_csv, 'a', newline = '', encoding = 'utf-8') as fout:
+    csvout = csv.writer(fout)
+    csvout.writerow(all_cols)    
 for event in my_events:
-    event_dfs = get_event_tables(event)
+    event_dfs = get_event_tables(event, all_cols)
     for df in event_dfs:
         df.to_csv(results_csv, header = False, index = False, mode = 'a')
