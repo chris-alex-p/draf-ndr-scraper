@@ -1,0 +1,5 @@
+beautifulsoup4==4.11.1
+pandas==2.0.3
+python_dateutil==2.8.2
+Requests==2.31.0
+selenium==4.11.2
