@@ -3,7 +3,7 @@
 ## A project written in Python to help you downloading dutch horse racing results
 Have you ever thought about having all the dutch harness racing results from [ndr.nl](https://ndr.nl/) since 1995 stored on your computer to analyse them? Probably not. But this project helps you downloading them anyway.
 
-You need Chrome 116 to fit the chromedriver.exe in this repository. Or just substiute the chromedriver.exe with the one which fits your Chrome version. 
+You need Chrome 116 to fit the chromedriver.exe in this repository. Or just substiute the chromedriver.exe with the one which fits your Chrome version (see [here](https://chromedriver.chromium.org/)). 
 
 
 ## Usage
