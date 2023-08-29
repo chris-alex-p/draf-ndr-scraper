@@ -20,6 +20,7 @@ would have the following names:
     errors_202201to202205.csv
 '''
 
+
 import csv
 import re
 import time
@@ -35,7 +36,6 @@ from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import Select
-
 
 
 def get_events(months_list, events_filename):
@@ -92,97 +92,186 @@ def get_events(months_list, events_filename):
         ]
         with open(
             events_filename, 'a', newline = '', encoding = 'utf-8'
-        ) as fout:
-            csvout = csv.writer(fout)
-            csvout.writerows(events)
+        ) as events_out:
+            csv_events = csv.writer(events_out)
+            csv_events.writerows(events)
     driver.quit()
 
 
-def get_event_tables(event_id, col_names):
+def get_event_results(event_id, result_cols):
     '''
-    Fetches all result tables for one horse racing event and returns them as
-    a list of data frames.
+    Uses the event_id from ndr.nl to go to the results webpage for this event.
+    And then combines the results of all races of one event with additional 
+    infos to each race and returns it as a pandas data frame.
 
     Parameters
     ----------
-    event : str
-        ID of an event used at ndr.nl.
+    event_id : str
+        ID used by ndr.nl internally to identify each race day (event).
+    result_cols : list
+        A list of all possible column names of the ndr.nl results pages.
 
     Returns
     -------
-    list
-        A list of data frames containing race result of one event.
+    event_results : pandas.DataFrame
+        A data frame with all results of one particular event (race day).
+
     '''
     url = (
         'https://ndr.nl/wp-content/plugins/ndr/' + 
-        'ndr-print.php?action=do_search&koersdag=' + event_id +
+        'ndr-print.php?action=do_search&koersdag=' + event_id + 
         '&koersnr=1&isAgenda=0&paard=false'
     )
-      # reading tables and error handling if no tables are present on url:
-      # return list with empty data frame if no tables are present
+    page = requests.get(url, timeout = 120)
+    soup = BeautifulSoup(page.content, 'html.parser')
+    results = soup.find_all('div', {'class':'ndr-koers-titelbalk'})
+    results_list = []
+    for result in results:
+        leaderboard = html_to_df(result)
+        result_df = add_raceinfos_to_results(result, leaderboard)
+        result_df = add_missing_columns(result_df, event_id, result_cols)
+        # order columns
+        result_df = result_df[result_cols]
+        results_list.append(result_df)
     try:
-        tables = pd.read_html(
-            url, thousands = None, converters = {'COTE':str, 'na 1e':str}
-        )
+        event_results = pd.concat(results_list)
     except ValueError as err:
         with open(
           errors_csv, mode = 'a', encoding = 'utf-8', newline = ''
-        ) as fout:
-            csvout = csv.writer(fout)
-            csvout.writerow([err, event, url])
-        return [pd.DataFrame()]
-    # initialize a list to which the resulting dataframes
-    # (one per race) will be appended
-    df_list = []
-    page = requests.get(url)
-    soup = BeautifulSoup(page.content, 'lxml')
-    for idx, table in enumerate(tables):
-        result_df = table
-        # get race infos which are not integrated into table but above
-        result_df['race_number'] = soup.find_all(
-          'div', {'class':'ndr-koers-naam'}
-        )[idx].get_text()
-        result_df['race_time'] = soup.find_all(
-          'div', {'class':'ndr-koers-tijd'}
-        )[idx].get_text()
-        koers_titel = soup.find_all('div', {'class':'ndr-koers-titel'})[idx]
-        result_df['race_title'] = koers_titel.find('h2').get_text()
-        race_description = koers_titel.find_all(
-          'span', {'class':'ndr-koers-omschrijving'}
-        )
-        if len(race_description) == 1:
-            result_df['description1'] = race_description[0].get_text()
-        elif len(race_description) == 2:
-            result_df['description1'] = race_description[0].get_text()
-            result_df['description2'] = race_description[1].get_text()
-        elif len(race_description) == 3:
-            result_df['description1'] = race_description[0].get_text()
-            result_df['description2'] = race_description[1].get_text()
-            result_df['description3'] = race_description[2].get_text()
-        koers_datum_baan = koers_titel.find_all(
-          'span', {'class':'ndr-koers-datum-baan'}
-        )
-        result_df['date_track'] = koers_datum_baan[0].get_text()
-        result_df['race_infos'] = koers_datum_baan[1].get_text()
-        result_df['event'] = event
-        # all possible columns in result tables from ndr.nl
-        #    result_df_cols = list(result_df.columns.values)
-        missing_cols = [
-            col for col in col_names if col not in result_df.columns
-        ]
-        result_df.loc[:, missing_cols] = ''
-        # reorder columns
-        result_df = result_df[all_cols]
-        # append df to df_list
-        df_list.append(result_df)
-    return df_list
+        ) as errors_out:
+            csv_errs = csv.writer(errors_out)
+            csv_errs.writerow([err, event, url])
+        event_results = pd.DataFrame()
+    return event_results
+
+
+def html_to_df(result_soup):
+    '''
+    Extracts a table between the html table tags and returns it as a pandas 
+    data frame.
+
+    Parameters
+    ----------
+    result_soup : TYPE
+        DESCRIPTION.
+
+    Returns
+    -------
+    result_df : TYPE
+        DESCRIPTION.
+
+    '''
+    table_soup = result_soup.find('table')
+    rows = []
+    table_rows = table_soup.find_all('tr')
+    # does a table exist?
+    if len(table_rows) > 0:
+        # extract table header
+        table_header = []
+        cells = table_rows[0].find_all('th')
+        for cell in cells:
+            table_header.append(cell.get_text().strip())
+        # extract table data
+        for table_row in table_rows[1:]:
+            row = []
+            cells = table_row.find_all('td')
+            for cell in cells:
+                cell_text = cell.get_text().strip()
+                cell_text = re.sub(' +', ' ', cell_text)
+                row.append(cell_text)
+            rows.append(row)
+        result_df = pd.DataFrame(rows, columns = table_header)
+    else:
+        result_df = pd.DataFrame()
+    return result_df
+
+
+def add_raceinfos_to_results(result_soup, result_df):
+    '''
+    Add additional infos to a race (title, time, track etc.) to the results
+    data frame.
+
+    Parameters
+    ----------
+    result_soup : bs4.element.Tag
+        Tag and the parsed contents of a tag.
+    result_df : pandas.DataFrame
+        Data frame with the results of a race.
+
+    Returns
+    -------
+    result_df : pandas.DataFrame
+        Data frame with the results of a race.
+
+    '''
+    # get race infos which are not integrated into table but above
+    print(type(result_soup))
+    result_df['race_number'] = result_soup.find(
+        'div', {'class':'ndr-koers-naam'}
+    ).get_text()
+    result_df['race_time'] = result_soup.find(
+        'div', {'class':'ndr-koers-tijd'}
+    ).get_text()
+    koers_titel = result_soup.find('div', {'class':'ndr-koers-titel'})
+    result_df['race_title'] = koers_titel.find('h2').get_text()
+    race_description = koers_titel.find_all(
+      'span', {'class':'ndr-koers-omschrijving'}
+    )
+    if len(race_description) == 1:
+        result_df['description1'] = race_description[0].get_text()
+    elif len(race_description) == 2:
+        result_df['description1'] = race_description[0].get_text()
+        result_df['description2'] = race_description[1].get_text()
+    elif len(race_description) == 3:
+        result_df['description1'] = race_description[0].get_text()
+        result_df['description2'] = race_description[1].get_text()
+        result_df['description3'] = race_description[2].get_text()
+    koers_datum_baan = koers_titel.find_all(
+        'span', {'class':'ndr-koers-datum-baan'}
+    )
+    result_df['date_track'] = koers_datum_baan[0].get_text()
+    result_df['race_infos'] = koers_datum_baan[1].get_text()
+    return result_df
 
 
 
-# Start of the script with user input:
+def add_missing_columns(result_df, event_id, result_cols):
+    '''
+    Adds missing columns of all possible columns to result data frame so the
+    result csv is easily appendable.
+
+    Parameters
+    ----------
+    result_df : pandas.DataFrame
+        Data Frame with race results.
+    event_id : str
+        ID used by ndr.nl for the events.
+    result_cols : list
+        List of all possible columns.
+
+    Returns
+    -------
+    result_df : pandas.DataFrame
+        Resulting data frame with all possible columns.
+
+    '''
+    # add event_id to data frame
+    result_df['event'] = event_id
+    missing_cols = [
+        col for col in result_cols if col not in result_df.columns
+    ]
+    result_df.loc[:, missing_cols] = ''
+    return result_df
+
+
+
+
+# Start of the script
+print(__doc__)
+
+# user input:
 # scraper fetches dutch horse racing results between two months which the user
 # has to declare
-print(__doc__)
 first_month = input(
     "Please enter the start of the interval by typing year and month " +
     "(e.g. '2013-02' for February 2013): "
@@ -197,6 +286,8 @@ end_date += relativedelta(months = 1)
 my_months = pd.date_range(
     start_date, end_date, freq = 'M'
 ).strftime('%Y-%#m').to_list()
+
+
 # build names for the three csv files, which are the main output of this script
 events_csv = (
     'events_' + first_month.replace('-', '') + 'to' + 
@@ -223,10 +314,13 @@ all_cols = [
     'nr.', 'paard', 'rijder', 'afstand', 'startnummer', 'startnr', 
     'box', 'tijd', 'na 1e', 'Hcap', 'prijs', 'COTE' 
 ]
+# write header to csv
 with open(results_csv, 'a', newline = '', encoding = 'utf-8') as fout:
     csvout = csv.writer(fout)
-    csvout.writerow(all_cols)    
+    csvout.writerow(all_cols)
+
 for event in my_events:
-    event_dfs = get_event_tables(event, all_cols)
-    for df in event_dfs:
-        df.to_csv(results_csv, header = False, index = False, mode = 'a')
+    event_results_df = get_event_results(event, all_cols)
+    event_results_df.to_csv(
+        results_csv, header = False, index = False, mode = 'a'
+    )
